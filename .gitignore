@@ -1,3 +1,6 @@
 .venv/
 __pycache__/
 *.pyc
+/mill.zip
+/source.xlsx
+/supplement.zip

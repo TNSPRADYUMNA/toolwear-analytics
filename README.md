@@ -2,7 +2,56 @@
 
 ToolWear Analytics benchmarks regressors for cumulative wheel wear, surface roughness, and absolute dimensional deviation. The evaluation asks how well each model transfers to a wheel excluded from training.
 
-## Run with Python 3.11
+## Measured wear and grinding-quality benchmarks
+
+### Insert wear from six sensor channels
+
+The primary wear benchmark uses [NASA Open Data Milling Wear](https://data.nasa.gov/dataset/milling-wear), provided by UC Berkeley's BEST Lab. It includes **146 records with measured flank wear (VB) across 16 milling experiments**. The measured target is milling-insert wear. Grinding-wheel wear accuracy remains unvalidated.
+
+```sh
+python -m pip install -r requirements.txt
+curl -L "https://data.nasa.gov/docs/legacy/mill.zip" -o mill.zip
+python study.py --input mill.zip --out measured-results
+```
+
+Archive SHA-256 is `de9c8685cb0e07b4f39459dc282b49192a3ad660e9577ff99b68dc9994e35d27`. The program reads the original archive locally. The repository contains generated benchmark output.
+
+The feature extractor uses the center half of each recorded trace. It summarizes AC/DC spindle current, table/spindle vibration, and table/spindle acoustic emission using median, interdecile spread, RMS, kurtosis, and an upper-band spectral energy fraction. Missing labels are excluded, and each record uses only its own sensor window. Process baselines and sensor-only/fused ablations test whether sensor features add value. Model and hyperparameter selection happens inside each outer leave-one-experiment-out fold.
+
+| Model | Pooled MAE (mm) | Pooled R² | Case-average MAE (mm) |
+| --- | ---: | ---: | ---: |
+| Median | 0.1950 | −0.061 | 0.1989 |
+| Process Ridge | 0.1410 | 0.411 | 0.1483 |
+| Sensor Ridge | 0.1386 | −0.217 | 0.1432 |
+| Fused Ridge | 0.1268 | 0.105 | 0.1230 |
+| Fused LightGBM | 0.1213 | 0.495 | 0.1206 |
+| Inner-CV-selected model | 0.1232 | 0.476 | 0.1237 |
+
+The inner-selected pipeline reduced pooled MAE by **36.8%** against the median. Its case-average MAE has a descriptive case-bootstrap interval of **0.091–0.162 mm**. Resampling held-out case errors describes variability across this benchmark and does not account for all training uncertainty. The fused LightGBM row is a prespecified comparator. [Metrics](measured-results/metrics.csv) · [Predictions](measured-results/predictions.csv) · [Case errors](measured-results/case_mae.csv)
+
+![Held-out milling wear predictions and case errors](measured-results/diagnostics.png)
+
+### Does machine current improve grinding-quality prediction?
+
+[Denkena, Wichmann and Wulf (2024), Mendeley Data v3](https://doi.org/10.17632/btngtsstd3.3), CC BY 4.0, gives an independent way to test current-based models on actual grinding. Nested grouped Ridge compares setup inputs against setup plus ten per-flute current/controller summaries. Folds hold out whole settings. The roughness analysis uses 96 runs; diameter error uses all 160.
+
+```sh
+curl -L "https://data.mendeley.com/public-files/datasets/btngtsstd3/files/244e6ff4-9351-4484-8cd6-ec84fdb164a2/file_downloaded" -o source.xlsx
+python grinding_quality.py --input source.xlsx --out measured-results
+```
+
+| Target | Setup-only MAE (µm) | Setup + currents MAE (µm) |
+| --- | ---: | ---: |
+| Mean roughness | 0.0475 | 0.0519 |
+| Mean absolute core-diameter error | 113.39 | 140.23 |
+
+Current summaries increased error for both targets under the observed setting split. This comparison applies to the recorded summary channels and the fitted linear models. [Quality metrics](measured-results/quality_metrics.csv) · [Fold predictions](measured-results/quality_predictions.csv)
+
+## Synthetic grinding-wheel demonstration
+
+The original synthetic wheel pipeline remains available through `analyze.py`.
+
+### Run with Python 3.11
 
 ```sh
 python -m pip install -r requirements.txt
